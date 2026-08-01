@@ -1,0 +1,140 @@
+DESIGN DECISIONS
+
+---------------------------------------------------
+Decision 1: Fact Table Grain
+---------------------------------------------------
+
+Choice:
+Option A – One row per encounter.
+
+Reason:
+Each encounter is the main business event in the healthcare system. The four analytical queries focus on encounters, revenue, specialties, and patients. Using one row per encounter keeps the fact table simple and supports all required analyses efficiently.
+
+---------------------------------------------------
+Decision 2: Dimension Tables
+---------------------------------------------------
+
+1. dim_date
+- date_key
+- calendar_date
+- day
+- month
+- month_name
+- quarter
+- year
+
+Reason:
+Supports analysis by day, month, quarter, and year.
+
+---------------------------------------------------
+
+2. dim_patient
+- patient_key
+- patient_id
+- first_name
+- last_name
+- gender
+- date_of_birth
+- age_group
+- mrn
+
+Reason:
+Stores patient information separately for reporting.
+
+---------------------------------------------------
+
+3. dim_provider
+- provider_key
+- provider_id
+- first_name
+- last_name
+- credential
+- specialty_key
+- department_key
+
+Reason:
+Allows reporting by provider.
+
+---------------------------------------------------
+
+4. dim_specialty
+- specialty_key
+- specialty_id
+- specialty_name
+- specialty_code
+
+Reason:
+Supports reporting by medical specialty.
+
+---------------------------------------------------
+
+5. dim_department
+- department_key
+- department_id
+- department_name
+- floor
+- capacity
+
+Reason:
+Supports department-level reporting.
+
+---------------------------------------------------
+
+6. dim_encounter_type
+- encounter_type_key
+- encounter_type
+
+Reason:
+Allows easy filtering by encounter type (Outpatient, Inpatient, ER).
+
+---------------------------------------------------
+
+7. dim_diagnosis
+- diagnosis_key
+- diagnosis_id
+- icd10_code
+- icd10_description
+
+Reason:
+Stores diagnosis information separately.
+
+---------------------------------------------------
+
+8. dim_procedure
+- procedure_key
+- procedure_id
+- cpt_code
+- cpt_description
+
+Reason:
+Stores procedure information separately.
+
+---------------------------------------------------
+Decision 3: Pre-Aggregated Metrics
+---------------------------------------------------
+
+Store these metrics in the fact table:
+
+- diagnosis_count
+- procedure_count
+- total_claim_amount
+- total_allowed_amount
+
+Reason:
+
+Pre-calculating these values reduces repeated calculations during analytical queries, making reports much faster.
+
+---------------------------------------------------
+Decision 4: Bridge Tables
+---------------------------------------------------
+
+Use bridge tables.
+
+Bridge Tables:
+
+- bridge_encounter_diagnoses
+- bridge_encounter_procedures
+
+Reason:
+
+An encounter can have multiple diagnoses and multiple procedures. Bridge tables preserve these many-to-many relationships without duplicating encounter records in the fact table.

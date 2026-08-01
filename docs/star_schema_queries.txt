@@ -1,0 +1,119 @@
+QUESTION 1: Monthly Encounters by Specialty
+
+Star Schema SQL:
+SELECT
+    d.year,
+    d.month,
+    s.specialty_name,
+    et.encounter_type,
+    COUNT(*) AS total_encounters,
+    COUNT(DISTINCT f.patient_key) AS unique_patients
+FROM fact_encounters f
+JOIN dim_date d
+    ON f.date_key = d.date_key
+JOIN dim_specialty s
+    ON f.specialty_key = s.specialty_key
+JOIN dim_encounter_type et
+    ON f.encounter_type_key = et.encounter_type_key
+GROUP BY
+    d.year,
+    d.month,
+    s.specialty_name,
+    et.encounter_type
+ORDER BY
+    d.year,
+    d.month;
+
+Execution time:
+
+Improvement factor: 
+
+Reason:
+Only three dimension tables are joined to the fact table. The star schema avoids long join chains and is optimized for analytical queries.
+
+QUESTION 2: Top Diagnosis-Procedure Pairs
+
+Star Schema SQL:
+
+SELECT
+    dd.icd10_code,
+    dp.cpt_code,
+    COUNT(*) AS encounter_count
+FROM bridge_encounter_diagnoses bd
+JOIN dim_diagnosis dd
+    ON bd.diagnosis_key = dd.diagnosis_key
+JOIN bridge_encounter_procedures bp
+    ON bd.encounter_key = bp.encounter_key
+JOIN dim_procedure dp
+    ON bp.procedure_key = dp.procedure_key
+GROUP BY
+    dd.icd10_code,
+    dp.cpt_code
+ORDER BY
+    encounter_count DESC;
+
+Execution time:
+
+Improvement factor: 
+
+Explanation:
+The bridge tables already connect encounters with diagnoses and procedures, reducing the complexity of joining multiple normalized tables.
+
+
+
+QUESTION 3: 30-Day Readmission Rate by Specialty
+
+
+Star Schema SQL:
+
+SELECT
+    s.specialty_name,
+    COUNT(*) AS readmissions
+FROM fact_encounters f1
+JOIN fact_encounters f2
+    ON f1.patient_key = f2.patient_key
+JOIN dim_date d1
+    ON f1.date_key = d1.date_key
+JOIN dim_date d2
+    ON f2.date_key = d2.date_key
+JOIN dim_specialty s
+    ON f1.specialty_key = s.specialty_key
+WHERE
+    d2.calendar_date > d1.calendar_date
+    AND d2.calendar_date <= DATE_ADD(d1.calendar_date, INTERVAL 30 DAY)
+GROUP BY
+    s.specialty_name
+ORDER BY
+    readmissions DESC;
+
+Execution time:
+
+
+Improvement factor: 
+
+QUESTION 4: Revenue by Specialty & Month
+
+Star Schema SQL:
+----------------
+SELECT
+    d.year,
+    d.month,
+    s.specialty_name,
+    SUM(f.total_allowed_amount) AS total_revenue
+FROM fact_encounters f
+JOIN dim_date d
+    ON f.date_key = d.date_key
+JOIN dim_specialty s
+    ON f.specialty_key = s.specialty_key
+GROUP BY
+    d.year,
+    d.month,
+    s.specialty_name
+ORDER BY
+    total_revenue DESC;
+
+Execution time:
+  
+Improvement factor:
+Explanation:
+The allowed amount is already stored in the fact table, eliminating the need to join the billing table. This reduces the number of joins and speeds up aggregation.

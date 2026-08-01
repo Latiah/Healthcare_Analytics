@@ -1,0 +1,111 @@
+ETL DESIGN
+
+====================================================
+1. Dimension Load Logic
+====================================================
+
+dim_patient
+------------
+- Extract data from the patients table.
+- Generate a surrogate key (patient_key).
+- Calculate the patient's age group from the date of birth.
+- Insert the records into dim_patient.
+
+dim_date
+---------
+- Populate this table once with all calendar dates needed.
+- Generate attributes such as day, month, month name, quarter, and year.
+- This table only needs occasional updates when new years are added.
+
+dim_provider
+------------
+- Extract provider information from the providers table.
+- Look up the corresponding specialty_key and department_key.
+- Insert the data into dim_provider.
+
+dim_specialty
+-------------
+- Load directly from the specialties table.
+
+dim_department
+--------------
+- Load directly from the departments table.
+
+dim_encounter_type
+------------------
+- Insert the distinct encounter types:
+  - Outpatient
+  - Inpatient
+  - ER
+
+dim_diagnosis
+-------------
+- Load data from the diagnoses table.
+
+dim_procedure
+-------------
+- Load data from the procedures table.
+
+====================================================
+2. Fact Table Load Logic
+====================================================
+
+For each encounter:
+
+1. Read one record from the encounters table.
+2. Look up:
+   - date_key
+   - patient_key
+   - provider_key
+   - specialty_key
+   - department_key
+   - encounter_type_key
+3. Count the number of diagnoses linked to the encounter.
+4. Count the number of procedures linked to the encounter.
+5. Retrieve billing information.
+6. Store:
+   - diagnosis_count
+   - procedure_count
+   - total_claim_amount
+   - total_allowed_amount
+7. Insert the completed record into fact_encounters.
+
+====================================================
+3. Bridge Table Load Logic
+====================================================
+
+bridge_encounter_diagnoses
+--------------------------
+- Read encounter_diagnoses.
+- Look up encounter_key.
+- Look up diagnosis_key.
+- Insert one record for each diagnosis linked to an encounter.
+
+bridge_encounter_procedures
+---------------------------
+- Read encounter_procedures.
+- Look up encounter_key.
+- Look up procedure_key.
+- Insert one record for each procedure linked to an encounter.
+
+====================================================
+4. Refresh Strategy
+====================================================
+
+Dimensions
+----------
+- Load once initially.
+- Refresh when new or updated records are available.
+
+Fact Table
+----------
+- Run an incremental load every day.
+- Only load encounters that were added since the last ETL run.
+
+Bridge Tables
+-------------
+- Refresh after the fact table has been updated.
+
+Late Arriving Data
+------------------
+- If billing or encounter information arrives late, update the corresponding fact record during the next ETL run.

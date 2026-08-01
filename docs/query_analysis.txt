@@ -26,7 +26,7 @@ Performance:
 - Estimated rows scanned: [Y]
 
 Bottleneck Identified:
-[Why is this slow? What's the root cause?]
+The query joins multiple normalized tables before grouping the data. As the encounters table grows, the JOIN operations and GROUP BY increase processing time because data must be gathered from several tables before aggregation.
 
 
 
@@ -130,4 +130,4 @@ Performance:
 - Estimated rows scanned: [Y]
 
 Bottleneck Identified:
-[Why is this slow? What's the root cause?]
+The query joins several normalized tables before calculating total revenue. The combination of multiple joins and aggregation increases execution time, especially when the billing and encounters tables contain large amounts of data.
