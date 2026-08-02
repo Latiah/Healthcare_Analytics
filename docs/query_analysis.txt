@@ -22,11 +22,10 @@ Schema Analysis:
 - Number of joins: 2
 
 Performance:
-- Execution time: 0.002s
-- Estimated rows scanned: [Y]
-
+- Execution time: 0.16s
+- Estimated rows scanned: 4
 Bottleneck Identified:
-The query joins multiple normalized tables before grouping the data. As the encounters table grows, the JOIN operations and GROUP BY increase processing time because data must be gathered from several tables before aggregation.
+The query joins multiple normalized tables before grouping the data. As the encounters table grows, the JOIN operations and GROUP BY require scanning and processing many records, making the query slower.
 
 
 
@@ -55,11 +54,10 @@ procedures
 - Number of joins: 3
 
 Performance:
-- Execution time: 0.004s
-- Estimated rows scanned: [Y]
-
+- Execution time: 0.158s
+- Estimated rows scanned: 5
 Bottleneck Identified:
-[Why is this slow? What's the root cause?]
+This query joins two many-to-many relationships (encounter_diagnoses and encounter_procedures). As the number of diagnoses and procedures increases, the joins produce many intermediate rows (row explosion), making aggregation slower.
 
 
 
@@ -79,18 +77,18 @@ GROUP BY s.specialty_name;
 
 Schema Analysis:
 - Tables joined: 
-encounters
+encounters (first instance)
+encounters (second instance - self join)
 providers
 specialities
 
-- Number of joins: 
+- Number of joins: 3 (including one self-join)
 
 Performance:
-- Execution time: 0.005s
-- Estimated rows scanned: [Y]
-
+- Execution time: 0.119s
+- Estimated rows scanned: 1
 Bottleneck Identified:
-[Why is this slow? What's the root cause?]
+The query performs a self-join on the large encounters table to identify readmissions within 30 days. Self-joins require comparing encounter records for each patient, which becomes expensive as the dataset grows.
 
 
 
@@ -126,8 +124,7 @@ specialties
 - Number of joins: 3
 
 Performance:
-- Execution time: 0.002s
-- Estimated rows scanned: [Y]
-
+- Execution time: 0.103s
+- Estimated rows scanned: 2
 Bottleneck Identified:
 The query joins several normalized tables before calculating total revenue. The combination of multiple joins and aggregation increases execution time, especially when the billing and encounters tables contain large amounts of data.
