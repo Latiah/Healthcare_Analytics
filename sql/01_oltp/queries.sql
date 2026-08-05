@@ -23,6 +23,7 @@ ORDER BY month, s.specialty_name;
 -- ------------------------------------------------------------
 -- Question 2: Top Diagnosis-Procedure Pairs
 -- ------------------------------------------------------------
+
 SELECT
     d.icd10_code,
     p.cpt_code,
@@ -64,6 +65,7 @@ ORDER BY readmission_rate DESC;
 -- ------------------------------------------------------------
 -- Question 4: Revenue by Specialty & Month
 -- ------------------------------------------------------------
+
 SELECT
     YEAR(b.claim_date)  AS year,
     MONTH(b.claim_date) AS month,

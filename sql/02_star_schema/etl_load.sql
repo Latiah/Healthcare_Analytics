@@ -94,9 +94,7 @@ ON DUPLICATE KEY UPDATE
     specialty_key  = VALUES(specialty_key),
     department_key = VALUES(department_key);
 
--- dim_encounter_type: distinct values straight from the source,
--- not a hardcoded list — so a new encounter type added upstream
--- shows up automatically on the next ETL run.
+
 INSERT INTO dim_encounter_type (encounter_type)
 SELECT DISTINCT encounter_type
 FROM encounters

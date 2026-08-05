@@ -24,11 +24,12 @@ ORDER BY
     d.year,
     d.month;
 
-Execution time:
 
-Improvement factor: 
+Execution time: 4.75ms vs. 5.19ms original
 
-Reason:
+Improvement factor: ~1.09x faster
+
+Explanation:
 Only three dimension tables are joined to the fact table. The star schema avoids long join chains and is optimized for analytical queries.
 
 QUESTION 2: Top Diagnosis-Procedure Pairs
@@ -52,9 +53,10 @@ GROUP BY
 ORDER BY
     encounter_count DESC;
 
-Execution time:
+Execution time: 0.0499ms vs. 6.6ms original
 
-Improvement factor: 
+Improvement factor: ~132x faster
+
 
 Explanation:
 The bridge tables already connect encounters with diagnoses and procedures, reducing the complexity of joining multiple normalized tables.
@@ -68,28 +70,26 @@ Star Schema SQL:
 
 SELECT
     s.specialty_name,
-    COUNT(*) AS readmissions
-FROM fact_encounters f1
-JOIN fact_encounters f2
-    ON f1.patient_key = f2.patient_key
-JOIN dim_date d1
-    ON f1.date_key = d1.date_key
-JOIN dim_date d2
-    ON f2.date_key = d2.date_key
-JOIN dim_specialty s
-    ON f1.specialty_key = s.specialty_key
-WHERE
-    d2.calendar_date > d1.calendar_date
-    AND d2.calendar_date <= DATE_ADD(d1.calendar_date, INTERVAL 30 DAY)
-GROUP BY
-    s.specialty_name
-ORDER BY
-    readmissions DESC;
+    COUNT(*) AS inpatient_discharges,
+    SUM(f.readmission_flag) AS readmitted_within_30d,
+    ROUND(AVG(f.readmission_flag), 4) AS readmission_rate
+FROM fact_encounters f
+JOIN dim_encounter_type et ON f.encounter_type_key = et.encounter_type_key
+JOIN dim_specialty s ON f.specialty_key = s.specialty_key
+WHERE et.encounter_type = 'Inpatient'
+GROUP BY s.specialty_name
+ORDER BY readmission_rate DESC;
 
-Execution time:
+Execution time: 1.63ms vs. 6.7ms original
 
+Improvement factor: ~4.11x faster
 
-Improvement factor: 
+Explanation:
+The 30-day readmission comparison — the expensive self-join in the OLTP
+version — is pre-computed once during ETL and stored as readmission_flag
+on the fact table. This query is now a plain GROUP BY + AVG with no
+self-join at all
+
 
 QUESTION 4: Revenue by Specialty & Month
 
@@ -112,8 +112,9 @@ GROUP BY
 ORDER BY
     total_revenue DESC;
 
-Execution time:
-  
-Improvement factor:
+Execution time: 2.72ms vs. 4.27ms original
+
+Improvement factor: ~1.57x faster
+
 Explanation:
 The allowed amount is already stored in the fact table, eliminating the need to join the billing table. This reduces the number of joins and speeds up aggregation.

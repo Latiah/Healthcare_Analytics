@@ -1,11 +1,12 @@
 -- Healthcare Analytics Lab
--- Part 3.3: The same 4 business questions, answered from the star schema
+-- Part 3.3: 4 business questions, answered from the star schema
 
 USE healthcare_analytics;
 
 -- ------------------------------------------------------------
 -- Question 1: Monthly Encounters by Specialty
 -- ------------------------------------------------------------
+
 SELECT
     d.year,
     d.month,
@@ -24,6 +25,7 @@ ORDER BY d.year, d.month;
 -- ------------------------------------------------------------
 -- Question 2: Top Diagnosis-Procedure Pairs
 -- ------------------------------------------------------------
+
 SELECT
     dd.icd10_code,
     dp.cpt_code,
@@ -56,6 +58,7 @@ ORDER BY readmission_rate DESC;
 -- ------------------------------------------------------------
 -- Question 4: Revenue by Specialty & Month
 -- ------------------------------------------------------------
+
 SELECT
     d.year,
     d.month,

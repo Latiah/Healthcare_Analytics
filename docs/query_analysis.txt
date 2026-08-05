@@ -22,8 +22,8 @@ Schema Analysis:
 - Number of joins: 2
 
 Performance:
-- Execution time: 0.16s
-- Estimated rows scanned: 4
+- Execution time: 5.19ms
+- Estimated rows scanned: 316
 Bottleneck Identified:
 The query joins multiple normalized tables before grouping the data. As the encounters table grows, the JOIN operations and GROUP BY require scanning and processing many records, making the query slower.
 
@@ -54,11 +54,10 @@ procedures
 - Number of joins: 3
 
 Performance:
-- Execution time: 0.158s
-- Estimated rows scanned: 5
+- Execution time: 6.6ms
+- Estimated rows scanned: 580
 Bottleneck Identified:
 This query joins two many-to-many relationships (encounter_diagnoses and encounter_procedures). As the number of diagnoses and procedures increases, the joins produce many intermediate rows (row explosion), making aggregation slower.
-
 
 
 Question 3: 30-Day Readmission Rate
@@ -85,8 +84,8 @@ specialities
 - Number of joins: 3 (including one self-join)
 
 Performance:
-- Execution time: 0.119s
-- Estimated rows scanned: 1
+- Execution time: 6.7ms
+- Estimated rows scanned: 104
 Bottleneck Identified:
 The query performs a self-join on the large encounters table to identify readmissions within 30 days. Self-joins require comparing encounter records for each patient, which becomes expensive as the dataset grows.
 
@@ -124,7 +123,7 @@ specialties
 - Number of joins: 3
 
 Performance:
-- Execution time: 0.103s
-- Estimated rows scanned: 2
+- Execution time: 4.27ms
+- Estimated rows scanned: 316
 Bottleneck Identified:
 The query joins several normalized tables before calculating total revenue. The combination of multiple joins and aggregation increases execution time, especially when the billing and encounters tables contain large amounts of data.

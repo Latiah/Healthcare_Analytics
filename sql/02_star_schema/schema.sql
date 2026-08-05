@@ -1,20 +1,7 @@
 -- Healthcare Analytics Lab
 -- Star schema (dimensional model) for analytical reporting
 
-CREATE DATABASE IF NOT EXISTS healthcare_analytics;
 USE healthcare_analytics;
-
-DROP TABLE IF EXISTS bridge_encounter_procedures;
-DROP TABLE IF EXISTS bridge_encounter_diagnoses;
-DROP TABLE IF EXISTS fact_encounters;
-DROP TABLE IF EXISTS dim_procedure;
-DROP TABLE IF EXISTS dim_diagnosis;
-DROP TABLE IF EXISTS dim_encounter_type;
-DROP TABLE IF EXISTS dim_provider;
-DROP TABLE IF EXISTS dim_department;
-DROP TABLE IF EXISTS dim_specialty;
-DROP TABLE IF EXISTS dim_patient;
-DROP TABLE IF EXISTS dim_date;
 
 -- ------------------------------------------------------------
 -- Date Dimension
