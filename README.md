@@ -81,7 +81,6 @@ The warehouse consists of:
 
 ---
 
-
 ## Expected Outcome
 
 After completing this project, the analytical queries become easier to write and require fewer joins compared to the normalized OLTP schema. Pre-computed metrics and dimensional modeling improve query performance and simplify business reporting.
