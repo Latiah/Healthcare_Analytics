@@ -11,7 +11,8 @@ SELECT
 FROM encounters e
 JOIN providers p ON e.provider_id = p.provider_id
 JOIN specialties s ON p.specialty_id = s.specialty_id
-GROUP BY month, s.specialty_name, e.encounter_type;
+GROUP BY month, s.specialty_name, e.encounter_type
+ORDER BY month, s.specialty_name;
 
 Schema Analysis:
 - Tables joined: 
@@ -25,7 +26,15 @@ Performance:
 - Execution time: 5.19ms
 - Estimated rows scanned: 316
 Bottleneck Identified:
-The query joins multiple normalized tables before grouping the data. As the encounters table grows, the JOIN operations and GROUP BY require scanning and processing many records, making the query slower.
+The query joins multiple normalized tables before grouping the data. As the encounters table grows, the JOIN operations and GROUP BY require scanning and processing many records, making the query slower. DATE_FORMAT() also derives the month per row, so no index on encounter_date can satisfy the GROUP BY and the planner must sort the intermediate result.
+
+Why this matters:
+This is the baseline demand and capacity report. Monthly volume per
+specialty is what clinic templates, rota sizing and theatre allocation
+are built from, and the unique_patients column separates genuine demand
+growth from the same patients attending more often. It is also how
+seasonal load — winter respiratory presentations, for instance — gets
+detected early enough to staff for.
 
 
 
@@ -36,7 +45,7 @@ SQL Query:
 SELECT 
     d.icd10_code, 
     p.cpt_code, 
-    COUNT(*) as frequency
+    COUNT(*) AS frequency
 FROM encounter_diagnoses ed
 JOIN diagnoses d ON ed.diagnosis_id = d.diagnosis_id
 JOIN encounter_procedures ep ON ed.encounter_id = ep.encounter_id
@@ -57,29 +66,49 @@ Performance:
 - Execution time: 6.6ms
 - Estimated rows scanned: 580
 Bottleneck Identified:
-This query joins two many-to-many relationships (encounter_diagnoses and encounter_procedures). As the number of diagnoses and procedures increases, the joins produce many intermediate rows (row explosion), making aggregation slower.
+This query joins two many-to-many relationships (encounter_diagnoses and encounter_procedures). As the number of diagnoses and procedures increases, the joins produce many intermediate rows (row explosion), making aggregation slower. The intermediate row count grows as the PRODUCT of diagnoses-per-encounter and procedures-per-encounter, not their sum, so a complex inpatient stay with 8 diagnoses and 6 procedures generates 48 intermediate rows on its own.
+
+Why this matters:
+Knowing which procedures habitually accompany a diagnosis supports two
+concrete uses. First, building care pathways and standing order sets for
+common presentations, so the expected workup is ordered consistently.
+Second, coding audit: a pairing that looks clinically unusual is how both
+miscoding and outlier practice get spotted. It also underpins
+cost-per-episode work, since the real cost of a diagnosis is the cost of
+the procedures that follow it.
 
 
 Question 3: 30-Day Readmission Rate
 
 SQL Query:
 
-SELECT s.specialty_name, COUNT(e2.encounter_id) * 1.0 / COUNT(e1.encounter_id) as readmission_rate
+SELECT
+    s.specialty_name,
+    COUNT(DISTINCT e1.encounter_id) AS inpatient_discharges,
+    COUNT(DISTINCT CASE WHEN e2.encounter_id IS NOT NULL
+                         THEN e1.encounter_id END)   AS readmitted_within_30d,
+    ROUND(
+        COUNT(DISTINCT CASE WHEN e2.encounter_id IS NOT NULL
+                             THEN e1.encounter_id END) * 1.0
+        / COUNT(DISTINCT e1.encounter_id),
+    4) AS readmission_rate
 FROM encounters e1
-JOIN providers pr ON e1.provider_id = pr.provider_id
-JOIN specialties s ON pr.specialty_id = s.specialty_id
-LEFT JOIN encounters e2 ON e1.patient_id = e2.patient_id 
-    AND e2.encounter_date > e1.discharge_date 
+JOIN providers pr   ON e1.provider_id = pr.provider_id
+JOIN specialties s  ON pr.specialty_id = s.specialty_id
+LEFT JOIN encounters e2
+    ON e2.patient_id = e1.patient_id
+    AND e2.encounter_date > e1.discharge_date
     AND e2.encounter_date <= DATE_ADD(e1.discharge_date, INTERVAL 30 DAY)
 WHERE e1.encounter_type = 'Inpatient'
-GROUP BY s.specialty_name;
+GROUP BY s.specialty_name
+ORDER BY readmission_rate DESC;
 
 Schema Analysis:
-- Tables joined: 
+- Tables joined:
 encounters (first instance)
 encounters (second instance - self join)
 providers
-specialities
+specialties
 
 - Number of joins: 3 (including one self-join)
 
@@ -87,7 +116,25 @@ Performance:
 - Execution time: 6.7ms
 - Estimated rows scanned: 104
 Bottleneck Identified:
-The query performs a self-join on the large encounters table to identify readmissions within 30 days. Self-joins require comparing encounter records for each patient, which becomes expensive as the dataset grows.
+The query performs a self-join on the large encounters table to identify readmissions within 30 days. Self-joins require comparing encounter records for each patient, which becomes expensive as the dataset grows. The 30-day window is a range that depends on each row's own discharge_date, so no index can resolve it with a single seek.
+
+Correctness note:
+An earlier version of this query computed the rate as
+COUNT(e2.encounter_id) / COUNT(e1.encounter_id). That was wrong. The
+self-join emits one row per (admission, follow-up visit) pair, so an
+admission followed by three visits inside the window contributed three
+rows — counting follow-up VISITS instead of READMITTED ADMISSIONS and
+inflating the rate. Wrapping both sides in COUNT(DISTINCT e1.encounter_id)
+counts each admission exactly once. The numerator and denominator are now
+also returned as their own columns so the rate can be checked by hand.
+
+Why this matters:
+Under the CMS Hospital Readmissions Reduction Program, a hospital with
+higher-than-expected 30-day readmission rates loses a percentage of its
+Medicare reimbursement across all admissions. An inflated rate is
+therefore not just a reporting error — it misrepresents the hospital's
+financial exposure and points quality-improvement effort at the wrong
+service line.
 
 
 
@@ -126,4 +173,13 @@ Performance:
 - Execution time: 4.27ms
 - Estimated rows scanned: 316
 Bottleneck Identified:
-The query joins several normalized tables before calculating total revenue. The combination of multiple joins and aggregation increases execution time, especially when the billing and encounters tables contain large amounts of data.
+The query joins several normalized tables before calculating total revenue. The combination of multiple joins and aggregation increases execution time, especially when the billing and encounters tables contain large amounts of data. The money lives in billing and the specialty lives in specialties with no direct relationship between them, so encounters is traversed purely as a hop the query does not otherwise need.
+
+Why this matters:
+This is the report that justifies moving staff, theatre time and clinic
+slots between service lines. Because it sums allowed_amount rather than
+claim_amount, it reflects what payers actually reimburse instead of what
+was billed — and the gap between those two figures is precisely what a
+revenue-cycle team investigates. Seeing it by specialty and month is what
+makes a seasonal swing in one service line actionable rather than just
+visible.

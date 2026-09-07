@@ -30,7 +30,24 @@ Execution time: 4.75ms vs. 5.19ms original
 Improvement factor: ~1.09x faster
 
 Explanation:
-Only three dimension tables are joined to the fact table. The star schema avoids long join chains and is optimized for analytical queries.
+Note that this version does not reduce the join count — it joins three
+dimensions where the OLTP query joined two tables, so the star schema
+actually joins MORE here and is still slightly faster. The gain comes
+from elsewhere: dim_date stores year and month as real columns, whereas
+the OLTP query derives the month per row with DATE_FORMAT(), which no
+index can satisfy and which forces the planner to sort the intermediate
+result before grouping.
+
+At ~1.09x this is the smallest improvement of the four, and on a
+315-encounter dataset a 0.44ms difference is close to measurement noise.
+The structural point stands regardless: precomputed grouping columns are
+what help this query, not a shorter join chain.
+
+Why this matters:
+This is the baseline demand and capacity report — clinic templates, rota
+sizing and theatre allocation are built from monthly volume per
+specialty, and unique_patients separates real demand growth from the
+same patients attending more often.
 
 QUESTION 2: Top Diagnosis-Procedure Pairs
 
@@ -55,11 +72,40 @@ ORDER BY
 
 Execution time: 0.0499ms vs. 6.6ms original
 
-Improvement factor: ~132x faster
+Improvement factor: ~132x measured, but NOT supported — see below
 
 
 Explanation:
-The bridge tables already connect encounters with diagnoses and procedures, reducing the complexity of joining multiple normalized tables.
+This is the weakest of the four claims and the 132x figure should not be
+quoted as a result.
+
+The join count is unchanged: the OLTP version joins 3 times
+(encounter_diagnoses -> diagnoses, -> encounter_procedures, ->
+procedures) and so does this one (bridge_encounter_diagnoses ->
+dim_diagnosis, -> bridge_encounter_procedures, -> dim_procedure). The
+star schema removes no join here, and it does not remove the row
+explosion either: pairing every diagnosis with every procedure on an
+encounter is what the business question actually asks for, so the
+intermediate result still grows as the product of the two.
+
+What the bridge tables genuinely give is a better access path. They hold
+only two integer surrogate keys under a composite primary key on
+(encounter_key, diagnosis_key), so the join runs against a narrower,
+clustered structure than the OLTP tables, which carry their own
+surrogate id plus separate secondary indexes. That is a real but modest
+advantage.
+
+The 132x itself is a measurement artifact. At 0.0499ms the star timing
+is below the reliable resolution of this setup for a query that still
+aggregates hundreds of intermediate rows, so the ratio reflects timer
+noise rather than a 132-fold speedup.
+
+Why this matters:
+The pairing is worth computing regardless of which schema wins, because
+it drives care pathways and standing order sets for common
+presentations, flags clinically unusual pairings for coding audit, and
+feeds cost-per-episode analysis. It is simply the one question of the
+four where dimensional modelling contributes least.
 
 
 
@@ -88,7 +134,29 @@ Explanation:
 The 30-day readmission comparison — the expensive self-join in the OLTP
 version — is pre-computed once during ETL and stored as readmission_flag
 on the fact table. This query is now a plain GROUP BY + AVG with no
-self-join at all
+self-join at all.
+
+This is the most trustworthy result of the four and the only one whose
+advantage would grow with data volume: the OLTP version's cost scales
+with inpatient encounters multiplied by encounters per patient, while
+this version stays a flat aggregation. It is also the only query where
+work was eliminated outright rather than merely reduced.
+
+Why this matters:
+This is the figure with money attached. Under the CMS Hospital
+Readmissions Reduction Program, a hospital with higher-than-expected
+30-day readmission rates loses a percentage of its Medicare
+reimbursement across ALL admissions, not just the readmitted ones. A
+specialty-level rate is therefore a financial exposure report as much as
+a clinical one — it shows which service lines are driving a penalty and
+where better discharge planning or follow-up would pay for itself.
+
+Precomputing the flag matters because this number is pulled repeatedly:
+monthly quality review, board reporting, and tracking whether an
+intervention actually moved it. Storing it also removes the
+double-counting trap the OLTP version had to guard against with
+COUNT(DISTINCT ...), which for a reported compliance figure is worth
+more than the speed.
 
 
 QUESTION 4: Revenue by Specialty & Month
@@ -117,4 +185,21 @@ Execution time: 2.72ms vs. 4.27ms original
 Improvement factor: ~1.57x faster
 
 Explanation:
-The allowed amount is already stored in the fact table, eliminating the need to join the billing table. This reduces the number of joins and speeds up aggregation.
+The allowed amount is already stored in the fact table, eliminating the
+need to join the billing table. This genuinely does reduce the join
+count (3 down to 2) and removes encounters from the path, where it had
+served only as a hop between billing and providers. As in Q1, dim_date
+also supplies year and month as stored columns instead of deriving them
+per row with YEAR()/MONTH().
+
+Why this matters:
+This is the report that justifies moving staff, theatre time and clinic
+slots between service lines — knowing that Cardiology bills heavily in
+one quarter and drops in another is what makes a staffing change
+defensible rather than a guess.
+
+Because it sums total_allowed_amount rather than the claimed amount, it
+reflects what payers actually reimburse instead of what was billed. The
+gap between those two figures is exactly what a revenue-cycle team
+investigates, and keeping both on the fact table means the comparison
+does not require going back to the billing table at all.
